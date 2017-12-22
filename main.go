@@ -32,60 +32,49 @@ func (s *ec2Filters) Set(value string) error {
 
 var filters ec2Filters
 
-type instances []*ec2.Instance
-
-func NewInstances(instances *ec2.DescribeInstancesOutput) instances {
+func Instances(res []*ec2.Reservation) []*ec2.Instance {
 	inst := make([]*ec2.Instance, 0)
-	for _, v := range instances.Reservations {
-		for _, v := range v.Instances {
-			inst = append(inst, v)
+	for _, v := range res {
+		for _, i := range v.Instances {
+			inst = append(inst, i)
 		}
 	}
 	return inst
 }
 
-func (s *instances) InstanceIds() []string {
-	ids := make([]string, len(*s))
-	for i, v := range *s {
-		ids[i] = v.GoString()
+func InstanceIds(inst []*ec2.Instance) []*string {
+	ids := make([]*string, len(inst))
+	for i, v := range inst {
+		ids[i] = v.InstanceId
 	}
 	return ids
 }
 
-func tagOutput(tag []*ec2.Tag) string {
+func InstanceOutput(res []*ec2.Reservation) string {
 	var str string
-	for _, v := range tag {
-		str += fmt.Sprintf("  %s: %s\n", *v.Key, *v.Value)
+	inst := Instances(res)
+	for _, v := range inst {
+		id := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
+		str += fmt.Sprintln(strings.Repeat("-", len(id)))
+		str += fmt.Sprintf(id)
+		str += fmt.Sprintln("Tags")
+		for _, t := range v.Tags {
+			str += fmt.Sprintf("  %s: %s\n", *t.Key, *t.Value)
+		}
 	}
 	return str
 }
 
-func (s *instances) shortOutput() {
-	num := fmt.Sprintf("Found %d instances\n", len(*s))
-	fmt.Println(strings.Repeat("-", len(num)))
-	fmt.Print(num)
-	for _, v := range *s {
-		name := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
-		tags := fmt.Sprintf("%s", tagOutput(v.Tags))
-		fmt.Println(strings.Repeat("-", len(name)))
-		fmt.Print(name)
-		fmt.Println("Tags:")
-		fmt.Printf("%s\n", tags)
+func InstanceStateOutput(states []*ec2.InstanceStateChange) string {
+	var str string
+	for _, v := range states {
+		id := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
+		str += fmt.Sprintln(strings.Repeat("-", len(id)))
+		str += fmt.Sprintln(id)
+		str += fmt.Sprintf("  Last State: %s\n", *v.PreviousState.Name)
+		str += fmt.Sprintf("  Current State: %s\n", *v.CurrentState.Name)
 	}
-}
-
-type instanceStates []*ec2.InstanceStateChange
-
-func NewInstanceStates(states *ec2.StopInstancesOutput) instanceStates {
-	return states.StoppingInstances
-}
-
-func (s *instanceStates) InstanceIds() []string {
-	inst := make([]string, len(*s))
-	for i, v := range *s {
-		inst[i] = *v.InstanceId
-	}
-	return inst
+	return str
 }
 
 func main() {
@@ -103,8 +92,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	insts := NewInstances(query)
-	insts.shortOutput()
+	fmt.Println(InstanceOutput(query.Reservations))
 	if action == "list" {
 		os.Exit(0)
 	}
@@ -118,12 +106,13 @@ func main() {
 	case "y":
 		fmt.Printf("Performing %s action on instances\n", action)
 		if action == "stop" {
-			// 	stopInstances := new(ec2.StopInstancesInput)
-			// 	stopInstances.SetInstanceIds(insts.InstanceIds())
-			// 	output, err := svc.StopInstances(stopInstances)
-			// 	if err != nil {
-			// 		fmt.Print(err)
-			// 	}
+			stopInstances := new(ec2.StopInstancesInput)
+			stopInstances.SetInstanceIds(InstanceIds(Instances(query.Reservations)))
+			output, err := svc.StopInstances(stopInstances)
+			if err != nil {
+				fmt.Print(err)
+			}
+			fmt.Println(InstanceStateOutput(output.StoppingInstances))
 		}
 	case "n":
 		fmt.Println("Exiting and taking no action")
