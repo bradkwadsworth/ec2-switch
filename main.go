@@ -57,6 +57,7 @@ func InstanceOutput(res []*ec2.Reservation) string {
 		id := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
 		str += fmt.Sprintln(strings.Repeat("-", len(id)))
 		str += fmt.Sprintf(id)
+		str += fmt.Sprintf("State: %s\n", *v.State.Name)
 		str += fmt.Sprintln("Tags")
 		for _, t := range v.Tags {
 			str += fmt.Sprintf("  %s: %s\n", *t.Key, *t.Value)
@@ -87,6 +88,10 @@ func main() {
 	sess := session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
 	svc := ec2.New(sess)
 	instanceInput := new(ec2.DescribeInstancesInput)
+	st := "instance-state-name"
+	stRun := "running"
+	stStop := "stopped"
+	filters = append(filters, &ec2.Filter{Name: &st, Values: []*string{&stRun, &stStop}})
 	instanceInput.Filters = filters
 	query, err := svc.DescribeInstances(instanceInput)
 	if err != nil {
@@ -110,9 +115,17 @@ func main() {
 			stopInstances.SetInstanceIds(InstanceIds(Instances(query.Reservations)))
 			output, err := svc.StopInstances(stopInstances)
 			if err != nil {
-				fmt.Print(err)
+				fmt.Println(err)
 			}
 			fmt.Println(InstanceStateOutput(output.StoppingInstances))
+		} else if action == "start" {
+			startInstances := new(ec2.StartInstancesInput)
+			startInstances.SetInstanceIds(InstanceIds(Instances(query.Reservations)))
+			output, err := svc.StartInstances(startInstances)
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println(InstanceStateOutput(output.StartingInstances))
 		}
 	case "n":
 		fmt.Println("Exiting and taking no action")
