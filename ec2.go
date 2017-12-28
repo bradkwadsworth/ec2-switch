@@ -36,8 +36,14 @@ func (s *ec2Filters) String() string {
 func (s *ec2Filters) Set(value string) error {
 	strs := strings.Split(value, ":")
 	filter := new(ec2.Filter)
-	filter.SetName(strs[0])
-	vals := strings.Split(strs[1], ",")
+	var vals []string
+	if strs[0] == "tag" {
+		filter.SetName(strs[0] + ":" + strs[1])
+		vals = strings.Split(strs[2], ",")
+	} else {
+		filter.SetName(strs[0])
+		vals = strings.Split(strs[1], ",")
+	}
 	filterVals := make([]*string, len(vals))
 	for i := range vals {
 		filterVals[i] = &vals[i]
