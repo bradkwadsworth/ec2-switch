@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	flag.Var(&filters, "tag", "Tags key:value. example MyKey:Value1,Value2")
+	flag.Var(&tags, "tag", "Tags key:value. example MyTag:Value1,Value2")
+	flag.Var(&filters, "filter", "Filters key:value. example MyKey:Value1,Value2")
 	flag.Parse()
 	action := flag.Arg(0)
 	if action == "" {
@@ -18,7 +19,8 @@ func main() {
 	}
 	sess := session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
 	svc := ec2.New(sess)
-	query, err := svc.DescribeInstances(newDescribeInstanceInput(filters))
+	allFilters := append(filters, tags...)
+	query, err := svc.DescribeInstances(newDescribeInstanceInput(allFilters))
 	if err != nil {
 		fmt.Println(err)
 	}

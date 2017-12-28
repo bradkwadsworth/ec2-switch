@@ -7,13 +7,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-type ec2Filters []*ec2.Filter
+type ec2Tags []*ec2.Filter
 
-func (s *ec2Filters) String() string {
+func (s *ec2Tags) String() string {
 	return fmt.Sprint(*s)
 }
 
-func (s *ec2Filters) Set(value string) error {
+func (s *ec2Tags) Set(value string) error {
 	strs := strings.Split(value, ":")
 	filter := new(ec2.Filter)
 	filter.SetName("tag:" + strs[0])
@@ -27,6 +27,27 @@ func (s *ec2Filters) Set(value string) error {
 	return nil
 }
 
+type ec2Filters []*ec2.Filter
+
+func (s *ec2Filters) String() string {
+	return fmt.Sprint(*s)
+}
+
+func (s *ec2Filters) Set(value string) error {
+	strs := strings.Split(value, ":")
+	filter := new(ec2.Filter)
+	filter.SetName(strs[0])
+	vals := strings.Split(strs[1], ",")
+	filterVals := make([]*string, len(vals))
+	for i := range vals {
+		filterVals[i] = &vals[i]
+	}
+	filter.SetValues(filterVals)
+	*s = append(*s, filter)
+	return nil
+}
+
+var tags ec2Tags
 var filters ec2Filters
 
 func instances(res []*ec2.Reservation) []*ec2.Instance {
