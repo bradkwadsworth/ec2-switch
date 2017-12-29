@@ -1,18 +1,23 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
+// Slice of *ec2.Filter types
 type ec2Tags []*ec2.Filter
 
+// Returns string of ec2Tags
 func (s *ec2Tags) String() string {
 	return fmt.Sprint(*s)
 }
 
+// Combine multiple tag flags
 func (s *ec2Tags) Set(value string) error {
 	strs := strings.Split(value, ":")
 	filter := new(ec2.Filter)
@@ -27,12 +32,15 @@ func (s *ec2Tags) Set(value string) error {
 	return nil
 }
 
+// Slice of ec2.Filter types
 type ec2Filters []*ec2.Filter
 
+// Returns string of ec2Filters
 func (s *ec2Filters) String() string {
 	return fmt.Sprint(*s)
 }
 
+// Combine multiple filter flags
 func (s *ec2Filters) Set(value string) error {
 	strs := strings.Split(value, ":")
 	filter := new(ec2.Filter)
@@ -56,24 +64,41 @@ func (s *ec2Filters) Set(value string) error {
 var tags ec2Tags
 var filters ec2Filters
 
+var actions = []string{"list", "start", "stop"}
+
+// Check command arguments
+func checkArgs(arg string) error {
+	for _, v := range actions {
+		if v == arg {
+			return nil
+		}
+	}
+	return errors.New("Specified action not defined")
+}
+
+// Get slice of ec2.Instance pointer objects from ec2.Reservation objects
 func instances(res []*ec2.Reservation) []*ec2.Instance {
 	inst := make([]*ec2.Instance, 0)
 	for _, v := range res {
 		for _, i := range v.Instances {
+			// Append ec2.Instance objects to separate slice
 			inst = append(inst, i)
 		}
 	}
 	return inst
 }
 
+// Get slice of InstanceId string pointers from ec2.Instance objects
 func instanceIds(inst []*ec2.Instance) []*string {
 	ids := make([]*string, len(inst))
 	for i, v := range inst {
+		// Append instanceId to new slice
 		ids[i] = v.InstanceId
 	}
 	return ids
 }
 
+// Output info on instances that match filters and/or tags
 func instanceOutput(res []*ec2.Reservation) string {
 	var str string
 	inst := instances(res)
@@ -90,20 +115,47 @@ func instanceOutput(res []*ec2.Reservation) string {
 	return str
 }
 
-func instanceStateOutput(states []*ec2.InstanceStateChange) string {
+// Output info on instance status
+func instanceStatusOutput(status *ec2.InstanceStatus) string {
 	var str string
-	for _, v := range states {
-		id := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
-		str += fmt.Sprintln(strings.Repeat("-", len(id)))
-		str += fmt.Sprintln(id)
-		str += fmt.Sprintf("  Last State: %s\n", *v.PreviousState.Name)
-		str += fmt.Sprintf("  Current State: %s\n", *v.CurrentState.Name)
-	}
+	id := fmt.Sprintf("Instance ID: %s", *status.InstanceId)
+	str += fmt.Sprintln(strings.Repeat("-", len(id)))
+	str += fmt.Sprintln(id)
+	str += fmt.Sprintf("Status: %s\n", *status.InstanceState.Name)
 	return str
 }
 
+// Wait for instances to become desired state
+func pollInstances(conn *ec2.EC2, states []*ec2.InstanceStateChange, reqState string) error {
+	instanceIds := make([]*string, len(states))
+	//Get instances ids form state change
+	for i := range states {
+		instanceIds[i] = states[i].InstanceId
+	}
+	for i := len(states); i > 0; {
+		// Query api for updates to instance statuses
+		instances, err := conn.DescribeInstanceStatus(newDescribeInstanceStatus(instanceIds))
+		if err != nil {
+			return err
+		}
+		for _, v := range instances.InstanceStatuses {
+			// When instance is in desired state decrement counter
+			if *v.InstanceState.Name == reqState {
+				i--
+			} else {
+				fmt.Println(instanceStatusOutput(v))
+			}
+		}
+		// Sleep between api calls
+		time.Sleep(5 * time.Second)
+	}
+	return nil
+}
+
+// Create new ec2.DescribeInstancesInput pointer object
 func newDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
 	input := new(ec2.DescribeInstancesInput)
+	// Only include instances who's states are running or stopped
 	st := "instance-state-name"
 	stRun := "running"
 	stStop := "stopped"
@@ -112,12 +164,23 @@ func newDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput
 	return input
 }
 
+// Create new ec2.DescribeInstanceStatusInput pointer object
+func newDescribeInstanceStatus(instances []*string) *ec2.DescribeInstanceStatusInput {
+	input := new(ec2.DescribeInstanceStatusInput)
+	input.SetInstanceIds(instances)
+	// Include all instances no matter what state they are in
+	input.SetIncludeAllInstances(true)
+	return input
+}
+
+// Create new ec2.StopInstancesInput pointer object
 func newStopInstanceInput(query *ec2.DescribeInstancesOutput) *ec2.StopInstancesInput {
 	input := new(ec2.StopInstancesInput)
 	input.SetInstanceIds(instanceIds(instances(query.Reservations)))
 	return input
 }
 
+// Create new ec2.StartInstancesInput pointer object
 func newStartInstanceInput(query *ec2.DescribeInstancesOutput) *ec2.StartInstancesInput {
 	input := new(ec2.StartInstancesInput)
 	input.SetInstanceIds(instanceIds(instances(query.Reservations)))
