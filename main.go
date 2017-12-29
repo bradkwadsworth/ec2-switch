@@ -12,6 +12,7 @@ import (
 func main() {
 	flag.Var(&tags, "tag", "Tags key:value. example MyTag:Value1,Value2")
 	flag.Var(&filters, "filter", "Filters key:value. example MyKey:Value1,Value2")
+	force := flag.Bool("force", false, "Do not ask to verify action")
 	flag.Parse()
 	// Verify command argument
 	action := flag.Arg(0)
@@ -35,11 +36,15 @@ func main() {
 		os.Exit(0)
 	}
 	// Verify requested action
-	fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", action)
 	var verify string
-	_, err = fmt.Scan(&verify)
-	if err != nil {
-		fmt.Println(err)
+	if *force {
+		verify = "y"
+	} else {
+		fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", action)
+		_, err = fmt.Scan(&verify)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 	switch verify {
 	case "y":

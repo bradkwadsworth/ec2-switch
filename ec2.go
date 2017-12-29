@@ -142,6 +142,7 @@ func pollInstances(conn *ec2.EC2, states []*ec2.InstanceStateChange, reqState st
 			// When instance is in desired state decrement counter
 			if *v.InstanceState.Name == reqState {
 				i--
+				fmt.Println(instanceStatusOutput(v))
 			} else {
 				fmt.Println(instanceStatusOutput(v))
 			}
