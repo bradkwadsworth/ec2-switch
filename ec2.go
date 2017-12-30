@@ -128,27 +128,30 @@ func instanceStatusOutput(status *ec2.InstanceStatus) string {
 // Wait for instances to become desired state
 func pollInstances(conn *ec2.EC2, states []*ec2.InstanceStateChange, reqState string) error {
 	instanceIds := make([]*string, len(states))
-	//Get instances ids form state change
+	readyInstances := make([]*string, len(states))
+	//Get instances ids from state change
 	for i := range states {
 		instanceIds[i] = states[i].InstanceId
 	}
-	for i := len(states); i > 0; {
+	for i := 0; i < len(states); {
+		if readyInstances[i] == states[i].InstanceId {
+			continue
+		}
 		// Query api for updates to instance statuses
 		instances, err := conn.DescribeInstanceStatus(newDescribeInstanceStatus(instanceIds))
 		if err != nil {
 			return err
 		}
-		for _, v := range instances.InstanceStatuses {
-			// When instance is in desired state decrement counter
-			if *v.InstanceState.Name == reqState {
-				i--
-				fmt.Println(instanceStatusOutput(v))
-			} else {
-				fmt.Println(instanceStatusOutput(v))
-			}
+		// When instance is in desired state add to readyInstances slice and increment counter
+		if *instances.InstanceStatuses[i].InstanceState.Name == reqState {
+			readyInstances[i] = instanceIds[i]
+			fmt.Println(instanceStatusOutput(instances.InstanceStatuses[i]))
+			i++
+		} else {
+			fmt.Println(instanceStatusOutput(instances.InstanceStatuses[i]))
 		}
 		// Sleep between api calls
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	return nil
 }
