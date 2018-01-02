@@ -1,3 +1,4 @@
+// Package instance provides control primitives for EC2 instances
 package instance
 
 import (
@@ -9,20 +10,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-type InstanceActions struct {
-	Conn      *ec2.EC2
-	Filters   []*ec2.Filter
-	Instances []*string
-	Action    string
-	Verified  bool
+// Action object for EC2 instance data
+type Action struct {
+	Conn     *ec2.EC2
+	Filters  []*ec2.Filter
+	IDs      []*string
+	Name     string
+	Verified bool
 }
 
-func NewInstanceActions() *InstanceActions {
-	return new(InstanceActions)
-}
-
-// Get slice of ec2.Instance pointer objects from ec2.Reservation objects
-func instances(res []*ec2.Reservation) []*ec2.Instance {
+// Get slice of EC2 instance info pointer objects from ec2.Reservation objects
+func info(res []*ec2.Reservation) []*ec2.Instance {
 	inst := make([]*ec2.Instance, 0)
 	for _, v := range res {
 		for _, i := range v.Instances {
@@ -33,8 +31,8 @@ func instances(res []*ec2.Reservation) []*ec2.Instance {
 	return inst
 }
 
-// Get slice of InstanceId string pointers from ec2.Instance objects
-func instanceIds(inst []*ec2.Instance) []*string {
+// Get slice of EC2 instance id string pointers from ec2.Instance objects
+func ids(inst []*ec2.Instance) []*string {
 	ids := make([]*string, len(inst))
 	for i, v := range inst {
 		// Append instanceId to new slice
@@ -43,11 +41,10 @@ func instanceIds(inst []*ec2.Instance) []*string {
 	return ids
 }
 
-// Output info on instances that match filters and/or tags
-func instanceOutput(res []*ec2.Reservation) string {
+// Output info on EC2 instances that match filters and/or tags
+func infoOutput(insts []*ec2.Instance) string {
 	var str string
-	inst := instances(res)
-	for _, v := range inst {
+	for _, v := range insts {
 		id := fmt.Sprintf("Instance ID: %s\n", *v.InstanceId)
 		str += fmt.Sprintln(strings.Repeat("-", len(id)))
 		str += fmt.Sprintf(id)
@@ -60,8 +57,8 @@ func instanceOutput(res []*ec2.Reservation) string {
 	return str
 }
 
-// Output info on instance status
-func instanceStatusOutput(status *ec2.InstanceStatus) string {
+// Output info on EC2 instance status
+func statusOutput(status *ec2.InstanceStatus) string {
 	var str string
 	id := fmt.Sprintf("Instance ID: %s", *status.InstanceId)
 	str += fmt.Sprintln(strings.Repeat("-", len(id)))
@@ -70,35 +67,8 @@ func instanceStatusOutput(status *ec2.InstanceStatus) string {
 	return str
 }
 
-// Wait for instances to become desired state
-func (s *InstanceActions) pollInstances(reqState string) error {
-	readyInstances := make([]*string, len(s.Instances))
-	//Get instances ids from state change
-	for i := 0; i < len(readyInstances); {
-		if readyInstances[i] == s.Instances[i] {
-			continue
-		}
-		// Query api for updates to instance statuses
-		instances, err := s.Conn.DescribeInstanceStatus(newDescribeInstanceStatus(s.Instances))
-		if err != nil {
-			return err
-		}
-		// When instance is in desired state add to readyInstances slice and increment counter
-		if *instances.InstanceStatuses[i].InstanceState.Name == reqState {
-			readyInstances[i] = s.Instances[i]
-			fmt.Println(instanceStatusOutput(instances.InstanceStatuses[i]))
-			i++
-		} else {
-			fmt.Println(instanceStatusOutput(instances.InstanceStatuses[i]))
-		}
-		// Sleep between api calls
-		time.Sleep(1 * time.Second)
-	}
-	return nil
-}
-
-// Create new ec2.DescribeInstancesInput pointer object
-func NewDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
+// Create new ec2.DescribeInstancesInput pointer object for describing EC2 instances
+func newDescribeInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
 	input := new(ec2.DescribeInstancesInput)
 	// Only include instances who's states are running or stopped
 	st := "instance-state-name"
@@ -109,53 +79,70 @@ func NewDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput
 	return input
 }
 
-// Create new ec2.DescribeInstanceStatusInput pointer object
-func newDescribeInstanceStatus(instances []*string) *ec2.DescribeInstanceStatusInput {
+// Create new ec2.DescribeInstanceStatusInput pointer object for describing EC2 instance statuses
+func newDescribeStatus(insts []*string) *ec2.DescribeInstanceStatusInput {
 	input := new(ec2.DescribeInstanceStatusInput)
-	input.SetInstanceIds(instances)
+	input.SetInstanceIds(insts)
 	// Include all instances no matter what state they are in
 	input.SetIncludeAllInstances(true)
 	return input
 }
 
-// Create new ec2.StopInstancesInput pointer object
-func newStopInstanceInput(query *ec2.DescribeInstancesOutput) *ec2.StopInstancesInput {
+// Create new ec2.StopInstancesInput pointer object for stopping EC2 instances
+func newStopInput(ids []*string) *ec2.StopInstancesInput {
 	input := new(ec2.StopInstancesInput)
-	input.SetInstanceIds(instanceIds(instances(query.Reservations)))
+	input.SetInstanceIds(ids)
 	return input
 }
 
-// Create new ec2.StartInstancesInput pointer object
-func newStartInstanceInput(ids []*string) *ec2.StartInstancesInput {
+// Create new ec2.StartInstancesInput pointer object for starting EC2 instances
+func newStartInput(ids []*string) *ec2.StartInstancesInput {
 	input := new(ec2.StartInstancesInput)
 	input.SetInstanceIds(ids)
 	return input
 }
 
-func (s *InstanceActions) SetInstanceIds() {
-	query, err := s.Conn.DescribeInstances(NewDescribeInstanceInput(s.Filters))
-	s.Instances = instanceIds(instances(query.Reservations))
+// NewAction creates a new Action object
+func NewAction() *Action {
+	return new(Action)
 }
 
-func (s *InstanceActions) ListInstances() error {
-	query, err := s.Conn.DescribeInstances(NewDescribeInstanceInput(s.Filters))
+// SetIDs set the IDs field for an Action object with EC2 instance IDs
+func (s *Action) SetIDs() error {
+	query, err := s.Conn.DescribeInstances(newDescribeInput(s.Filters))
 	if err != nil {
 		return err
 	}
-	fmt.Println(instanceOutput(query.Reservations))
+	s.IDs = ids(info(query.Reservations))
 	return nil
 }
 
-func (s *InstanceActions) verifyAction() error {
-	if s.Action == "" {
+// List creates a list of EC2 instances that match desired Filters field
+func (s *Action) List() error {
+	query, err := s.Conn.DescribeInstances(newDescribeInput(s.Filters))
+	if err != nil {
+		return err
+	}
+	ids := info(query.Reservations)
+	fmt.Println(infoOutput(ids))
+	return nil
+}
+
+// Verify if desired EC2 instance action should be performed
+func (s *Action) verifyAction() error {
+	var verify string
+	if s.Name == "" {
 		return errors.New("No action defined")
 	}
-	fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", s.Action)
+	if s.Verified == true {
+		return nil
+	}
+	fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", s.Name)
 	_, err := fmt.Scan(&verify)
 	if err != nil {
 		return err
 	}
-	switch s.Action {
+	switch verify {
 	case "y":
 		s.Verified = true
 		return nil
@@ -167,29 +154,69 @@ func (s *InstanceActions) verifyAction() error {
 	}
 }
 
-func (s *InstanceActions) StartInstances() error {
+// Start commands EC2 instances to start
+func (s *Action) Start() error {
+	if err := s.List(); err != nil {
+		return err
+	}
 	if err := s.verifyAction(); err != nil {
 		return err
 	}
 	if s.Verified {
-		output, err := s.Conn.StartInstances(newStartInstanceInput(s.Instances))
+		_, err := s.Conn.StartInstances(newStartInput(s.IDs))
 		if err != nil {
 			return err
 		}
-	}
-	if err := s.pollInstances("running"); err != nil {
-		return err
+		if err := s.poll("running"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (s *InstanceActions) StopInstances() error {
-	output, err := conn.StartInstances(newStartInstanceInput(query))
-	if err != nil {
+// Stop commands EC2 instances to stop
+func (s *Action) Stop() error {
+	if err := s.List(); err != nil {
 		return err
 	}
-	if err := pollInstances(conn, output.StartingInstances, "stopped"); err != nil {
+	if err := s.verifyAction(); err != nil {
 		return err
+	}
+	if s.Verified {
+		_, err := s.Conn.StopInstances(newStopInput(s.IDs))
+		if err != nil {
+			return err
+		}
+		if err := s.poll("stopped"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Wait for EC2 instances to become desired state
+func (s *Action) poll(reqState string) error {
+	readyInstances := make([]*string, len(s.IDs))
+	//Get instances ids from state change
+	for i := 0; i < len(readyInstances); {
+		if readyInstances[i] == s.IDs[i] {
+			continue
+		}
+		// Query api for updates to instance statuses
+		insts, err := s.Conn.DescribeInstanceStatus(newDescribeStatus(s.IDs))
+		if err != nil {
+			return err
+		}
+		// When instance is in desired state add to readyInstances slice and increment counter
+		if *insts.InstanceStatuses[i].InstanceState.Name == reqState {
+			readyInstances[i] = s.IDs[i]
+			fmt.Println(statusOutput(insts.InstanceStatuses[i]))
+			i++
+		} else {
+			fmt.Println(statusOutput(insts.InstanceStatuses[i]))
+		}
+		// Sleep between api calls
+		time.Sleep(1 * time.Second)
 	}
 	return nil
 }

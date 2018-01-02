@@ -5,7 +5,6 @@ import (
 )
 
 var actions = []string{"list", "start", "stop"}
-var verify string
 
 // Check command arguments
 func CheckArgs(arg string) error {
