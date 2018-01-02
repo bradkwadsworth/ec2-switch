@@ -59,5 +59,8 @@ func (s *ec2Filters) Set(value string) error {
 	return nil
 }
 
+// Tags is a slice of *ec2.Filter. Used as a shortcut to EC2 instance tags
 var Tags ec2Tags
+
+// Filters is a slice of  *ec2.Filter
 var Filters ec2Filters

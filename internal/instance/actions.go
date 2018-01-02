@@ -8,7 +8,7 @@ import (
 
 var actions = []string{"list", "start", "stop"}
 
-// Check command arguments
+// CheckArgs verifies command arguments are correct
 func CheckArgs(arg string) error {
 	for _, v := range actions {
 		if v == arg {
