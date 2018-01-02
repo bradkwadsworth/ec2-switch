@@ -47,5 +47,9 @@ func main() {
 		if err := insts.Stop(); err != nil {
 			fmt.Println(err)
 		}
+	case "reboot":
+		if err := insts.Reboot(); err != nil {
+			fmt.Println(err)
+		}
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var actions = []string{"list", "start", "stop"}
+var actions = []string{"list", "start", "stop", "reboot"}
 
 // CheckArgs verifies command arguments are correct
 func CheckArgs(arg string) error {

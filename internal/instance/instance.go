@@ -74,8 +74,9 @@ func newDescribeInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
 	st := "instance-state-name"
 	stRun := "running"
 	stStop := "stopped"
-	filters = append(filters, &ec2.Filter{Name: &st, Values: []*string{&stRun, &stStop}})
-	input.Filters = filters
+	stReboot := "rebooting"
+	filters = append(filters, &ec2.Filter{Name: &st, Values: []*string{&stRun, &stStop, &stReboot}})
+	input.SetFilters(filters)
 	return input
 }
 
@@ -98,6 +99,12 @@ func newStopInput(ids []*string) *ec2.StopInstancesInput {
 // Create new ec2.StartInstancesInput pointer object for starting EC2 instances
 func newStartInput(ids []*string) *ec2.StartInstancesInput {
 	input := new(ec2.StartInstancesInput)
+	input.SetInstanceIds(ids)
+	return input
+}
+
+func newRebootInput(ids []*string) *ec2.RebootInstancesInput {
+	input := new(ec2.RebootInstancesInput)
 	input.SetInstanceIds(ids)
 	return input
 }
@@ -188,6 +195,26 @@ func (s *Action) Stop() error {
 			return err
 		}
 		if err := s.poll("stopped"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Reboot commands EC2 instances to reboot
+func (s *Action) Reboot() error {
+	if err := s.List(); err != nil {
+		return err
+	}
+	if err := s.verifyAction(); err != nil {
+		return err
+	}
+	if s.Verified {
+		_, err := s.Conn.RebootInstances(newRebootInput(s.IDs))
+		if err != nil {
+			return err
+		}
+		if err := s.poll("running"); err != nil {
 			return err
 		}
 	}
