@@ -1,4 +1,4 @@
-package main
+package instance
 
 import (
 	"errors"
@@ -9,71 +9,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-// Slice of *ec2.Filter types
-type ec2Tags []*ec2.Filter
-
-// Returns string of ec2Tags
-func (s *ec2Tags) String() string {
-	return fmt.Sprint(*s)
+type InstanceActions struct {
+	Conn      *ec2.EC2
+	Filters   []*ec2.Filter
+	Instances []*string
+	Action    string
+	Verified  bool
 }
 
-// Combine multiple tag flags
-func (s *ec2Tags) Set(value string) error {
-	strs := strings.Split(value, ":")
-	filter := new(ec2.Filter)
-	filter.SetName("tag:" + strs[0])
-	vals := strings.Split(strs[1], ",")
-	filterVals := make([]*string, len(vals))
-	for i := range vals {
-		filterVals[i] = &vals[i]
-	}
-	filter.SetValues(filterVals)
-	*s = append(*s, filter)
-	return nil
-}
-
-// Slice of ec2.Filter types
-type ec2Filters []*ec2.Filter
-
-// Returns string of ec2Filters
-func (s *ec2Filters) String() string {
-	return fmt.Sprint(*s)
-}
-
-// Combine multiple filter flags
-func (s *ec2Filters) Set(value string) error {
-	strs := strings.Split(value, ":")
-	filter := new(ec2.Filter)
-	var vals []string
-	if strs[0] == "tag" {
-		filter.SetName(strs[0] + ":" + strs[1])
-		vals = strings.Split(strs[2], ",")
-	} else {
-		filter.SetName(strs[0])
-		vals = strings.Split(strs[1], ",")
-	}
-	filterVals := make([]*string, len(vals))
-	for i := range vals {
-		filterVals[i] = &vals[i]
-	}
-	filter.SetValues(filterVals)
-	*s = append(*s, filter)
-	return nil
-}
-
-var tags ec2Tags
-var filters ec2Filters
-
-var actions = []string{"list", "start", "stop"}
-
-// Check command arguments
-func checkArgs(arg string) error {
-	for _, v := range actions {
-		if v == arg {
-			return nil
-		}
-	}
-	return errors.New("Specified action not defined")
+func NewInstanceActions() *InstanceActions {
+	return new(InstanceActions)
 }
 
 // Get slice of ec2.Instance pointer objects from ec2.Reservation objects
@@ -126,25 +71,21 @@ func instanceStatusOutput(status *ec2.InstanceStatus) string {
 }
 
 // Wait for instances to become desired state
-func pollInstances(conn *ec2.EC2, states []*ec2.InstanceStateChange, reqState string) error {
-	instanceIds := make([]*string, len(states))
-	readyInstances := make([]*string, len(states))
+func (s *InstanceActions) pollInstances(reqState string) error {
+	readyInstances := make([]*string, len(s.Instances))
 	//Get instances ids from state change
-	for i := range states {
-		instanceIds[i] = states[i].InstanceId
-	}
-	for i := 0; i < len(states); {
-		if readyInstances[i] == states[i].InstanceId {
+	for i := 0; i < len(readyInstances); {
+		if readyInstances[i] == s.Instances[i] {
 			continue
 		}
 		// Query api for updates to instance statuses
-		instances, err := conn.DescribeInstanceStatus(newDescribeInstanceStatus(instanceIds))
+		instances, err := s.Conn.DescribeInstanceStatus(newDescribeInstanceStatus(s.Instances))
 		if err != nil {
 			return err
 		}
 		// When instance is in desired state add to readyInstances slice and increment counter
 		if *instances.InstanceStatuses[i].InstanceState.Name == reqState {
-			readyInstances[i] = instanceIds[i]
+			readyInstances[i] = s.Instances[i]
 			fmt.Println(instanceStatusOutput(instances.InstanceStatuses[i]))
 			i++
 		} else {
@@ -157,7 +98,7 @@ func pollInstances(conn *ec2.EC2, states []*ec2.InstanceStateChange, reqState st
 }
 
 // Create new ec2.DescribeInstancesInput pointer object
-func newDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
+func NewDescribeInstanceInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
 	input := new(ec2.DescribeInstancesInput)
 	// Only include instances who's states are running or stopped
 	st := "instance-state-name"
@@ -185,8 +126,70 @@ func newStopInstanceInput(query *ec2.DescribeInstancesOutput) *ec2.StopInstances
 }
 
 // Create new ec2.StartInstancesInput pointer object
-func newStartInstanceInput(query *ec2.DescribeInstancesOutput) *ec2.StartInstancesInput {
+func newStartInstanceInput(ids []*string) *ec2.StartInstancesInput {
 	input := new(ec2.StartInstancesInput)
-	input.SetInstanceIds(instanceIds(instances(query.Reservations)))
+	input.SetInstanceIds(ids)
 	return input
+}
+
+func (s *InstanceActions) SetInstanceIds() {
+	query, err := s.Conn.DescribeInstances(NewDescribeInstanceInput(s.Filters))
+	s.Instances = instanceIds(instances(query.Reservations))
+}
+
+func (s *InstanceActions) ListInstances() error {
+	query, err := s.Conn.DescribeInstances(NewDescribeInstanceInput(s.Filters))
+	if err != nil {
+		return err
+	}
+	fmt.Println(instanceOutput(query.Reservations))
+	return nil
+}
+
+func (s *InstanceActions) verifyAction() error {
+	if s.Action == "" {
+		return errors.New("No action defined")
+	}
+	fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", s.Action)
+	_, err := fmt.Scan(&verify)
+	if err != nil {
+		return err
+	}
+	switch s.Action {
+	case "y":
+		s.Verified = true
+		return nil
+	case "n":
+		s.Verified = false
+		return nil
+	default:
+		return errors.New("Answer must be y or n")
+	}
+}
+
+func (s *InstanceActions) StartInstances() error {
+	if err := s.verifyAction(); err != nil {
+		return err
+	}
+	if s.Verified {
+		output, err := s.Conn.StartInstances(newStartInstanceInput(s.Instances))
+		if err != nil {
+			return err
+		}
+	}
+	if err := s.pollInstances("running"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *InstanceActions) StopInstances() error {
+	output, err := conn.StartInstances(newStartInstanceInput(query))
+	if err != nil {
+		return err
+	}
+	if err := pollInstances(conn, output.StartingInstances, "stopped"); err != nil {
+		return err
+	}
+	return nil
 }
