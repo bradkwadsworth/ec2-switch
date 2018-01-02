@@ -10,7 +10,8 @@ EC2 Switch uses aws-sdk-go, therefore AWS credentials must either be sourced wit
 TODO
 ### Build from Source
 #### Get dependencies
-`go get github.com/aws/aws-sdk-go/service/ec2`
+Manually: <br>`go get github.com/aws/aws-sdk-go/service/ec2`<br>
+[ Use Go dep dependency management](https://github.com/golang/dep): <br>`dep ensure`
 
 #### Build
 `go build`
