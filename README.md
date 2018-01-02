@@ -17,7 +17,7 @@ TODO
 #### Install
 `go install`
 
-Copy the ec2-switch binary somewhere in your path
+Copy the ec2-switch binary somewhere in your path.
 
 ## List Instances by Tag
 `ec2-switch -tag Environment:myenv list`
