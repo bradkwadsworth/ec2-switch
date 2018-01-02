@@ -196,24 +196,26 @@ func (s *Action) Stop() error {
 
 // Wait for EC2 instances to become desired state
 func (s *Action) poll(reqState string) error {
-	readyInstances := make([]*string, len(s.IDs))
+	readyInstances := make([]string, len(s.IDs))
 	//Get instances ids from state change
 	for i := 0; i < len(readyInstances); {
-		if readyInstances[i] == s.IDs[i] {
-			continue
-		}
 		// Query api for updates to instance statuses
 		insts, err := s.Conn.DescribeInstanceStatus(newDescribeStatus(s.IDs))
 		if err != nil {
 			return err
 		}
 		// When instance is in desired state add to readyInstances slice and increment counter
-		if *insts.InstanceStatuses[i].InstanceState.Name == reqState {
-			readyInstances[i] = s.IDs[i]
-			fmt.Println(statusOutput(insts.InstanceStatuses[i]))
-			i++
-		} else {
-			fmt.Println(statusOutput(insts.InstanceStatuses[i]))
+		for k := range insts.InstanceStatuses {
+			if readyInstances[k] == *insts.InstanceStatuses[k].InstanceId {
+				continue
+			}
+			if *insts.InstanceStatuses[k].InstanceState.Name == reqState {
+				readyInstances[k] = *insts.InstanceStatuses[k].InstanceId
+				fmt.Println(statusOutput(insts.InstanceStatuses[k]))
+				i++
+			} else {
+				fmt.Println(statusOutput(insts.InstanceStatuses[k]))
+			}
 		}
 		// Sleep between api calls
 		time.Sleep(1 * time.Second)
