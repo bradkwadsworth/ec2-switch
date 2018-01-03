@@ -76,7 +76,7 @@ func newDescribeInput(filters []*ec2.Filter) *ec2.DescribeInstancesInput {
 	stStop := "stopped"
 	stReboot := "rebooting"
 	filters = append(filters, &ec2.Filter{Name: &st, Values: []*string{&stRun, &stStop, &stReboot}})
-	input.SetFilters(filters)
+	input = input.SetFilters(filters)
 	return input
 }
 
