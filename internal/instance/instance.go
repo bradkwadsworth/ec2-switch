@@ -144,7 +144,7 @@ func (s *Action) verifyAction() error {
 	if s.Verified == true {
 		return nil
 	}
-	fmt.Printf("Are you sure you would like to %s the above instances (y/n)\n", s.Name)
+	fmt.Printf("Are you sure you would like to %s the above %d instances (y/n)\n", s.Name, len(s.IDs))
 	_, err := fmt.Scan(&verify)
 	if err != nil {
 		return err
