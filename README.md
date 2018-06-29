@@ -11,6 +11,7 @@ TODO
 ### Build from Source
 #### Get dependencies
 Manually: <br>`go get github.com/aws/aws-sdk-go/service/ec2`<br>
+
 [ Use Go dep dependency management](https://github.com/golang/dep): <br>`dep ensure`
 
 #### Build
