@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -11,12 +10,16 @@ import (
 type ec2Tags []*ec2.Filter
 
 // Returns string of ec2Tags
-func (s *ec2Tags) String() string {
-	return fmt.Sprint(*s)
+func (s ec2Tags) String() string {
+	str := make([]string, 0)
+	for _, v := range s {
+		str = append(str, v.String())
+	}
+	return strings.Join(str, ",")
 }
 
 // Combine multiple tag flags
-func (s *ec2Tags) Set(value string) error {
+func (s ec2Tags) Set(value string) {
 	strs := strings.Split(value, ":")
 	filter := new(ec2.Filter)
 	filter.SetName("tag:" + strs[0])
@@ -26,16 +29,19 @@ func (s *ec2Tags) Set(value string) error {
 		filterVals[i] = &vals[i]
 	}
 	filter.SetValues(filterVals)
-	*s = append(*s, filter)
-	return nil
+	s = append(s, filter)
 }
 
 // Slice of ec2.Filter types
 type ec2Filters []*ec2.Filter
 
 // Returns string of ec2Filters
-func (s *ec2Filters) String() string {
-	return fmt.Sprint(*s)
+func (s ec2Filters) String() string {
+	str := make([]string, 0)
+	for _, v := range s {
+		str = append(str, v.String())
+	}
+	return strings.Join(str, ",")
 }
 
 // Combine multiple filter flags
